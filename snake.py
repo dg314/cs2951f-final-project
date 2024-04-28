@@ -1,10 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Optional
 import numpy as np
 import copy
 import random
 import time
 import colorsys
+
+ACTION_SHIFTS = [
+    (-1, 0),
+    (0, 1),
+    (1, 0),
+    (0, -1)
+]
 
 class SnakeGame:
     def __init__(self, width: int = 5, height: int = 5, obs_trail_depth: int = 10) -> None:
@@ -37,16 +44,10 @@ class SnakeGame:
     def step(self, action: int) -> Tuple[bool, bool]:
         self.num_steps += 1
 
-        if action == 0:
-            self.snake_r -= 1
-        elif action == 1:
-            self.snake_c += 1
-        elif action == 2:
-            self.snake_r += 1
-        elif action == 3:
-            self.snake_c -= 1
-        else:
-            raise Exception(f"Invalid action {action}")
+        shift_r, shift_c = ACTION_SHIFTS[action]
+
+        self.snake_r += shift_r
+        self.snake_c += shift_c
         
         if not self.is_square_valid(self.snake_r, self.snake_c):
             return True, False
@@ -55,6 +56,8 @@ class SnakeGame:
             return True, False
         
         ate_apple = self.snake_r == self.apple_r and self.snake_c == self.apple_c
+
+        self.board[self.snake_r, self.snake_c] = self.score + 1
 
         if ate_apple:
             self.score += 1
@@ -70,12 +73,11 @@ class SnakeGame:
         else:
             self.board = np.maximum(self.board - 1, 0)
 
-        self.board[self.snake_r, self.snake_c] = self.score
-
         return False, ate_apple
     
+    # Compresses game state to binary vector observation
     def observe(self) -> np.ndarray:
-        obs = np.zeros(((self.height + self.width) * 2 + self.obs_trail_depth * 2))
+        obs = np.zeros(((self.height + self.width) * 2 + self.obs_trail_depth * 4))
 
         obs[self.snake_r] = 1
         obs[self.height + self.snake_c] = 1
@@ -88,14 +90,13 @@ class SnakeGame:
         for i in range(min(self.obs_trail_depth, self.score - 1)):
             found_path = False
 
-            for (shift_r, shift_c) in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
+            for a, (shift_r, shift_c) in enumerate(ACTION_SHIFTS):
                 next_r, next_c = cur_r + shift_r, cur_c + shift_c
 
                 if self.is_square_valid(next_r, next_c) and self.board[next_r][next_c]:
                     found_path = True
 
-                    obs[head_apple_obs_size + i * 2] = shift_r
-                    obs[head_apple_obs_size + i * 2 + 1] = shift_c
+                    obs[head_apple_obs_size + i * 4 + a] = 1
 
                     cur_r, cur_c = next_r, next_c
                     break
@@ -105,8 +106,12 @@ class SnakeGame:
             
         return obs
     
-    def visualize(self, visualize_mode: str, terminated: bool) -> None:
-        if visualize_mode == "text":
+    def visualize(self, frame_time: Optional[int], terminated: bool) -> None:
+        if terminated:
+            print("Steps: ", self.num_steps)
+            print("Score: ", self.score)
+
+        if frame_time is not None:
             print("\n" * 25)
 
             print("┌" + "─" * self.width + "┐")
@@ -124,7 +129,7 @@ class SnakeGame:
                         raw_red, raw_green, raw_blue = colorsys.hsv_to_rgb(
                             0.5 * val_prop,
                             0 if val == board_max else 1,
-                            0.5 + 0.5 * val_prop
+                            0.6 + 0.4 * val_prop
                         )
                         red, green, blue = int(raw_red * 255), int(raw_green * 255), int(raw_blue * 255)
 
@@ -151,13 +156,8 @@ class SnakeGame:
 
             print("└" + "─" * self.width + "┘")
 
-            time.sleep(0.1)
-        elif visualize_mode != "none":
-            raise Exception(f"Invalid visualize_mode {visualize_mode}")
-
-        if terminated:
-            print("Steps: ", self.num_steps)
-            print("Score: ", self.score)
+            if not terminated:
+                time.sleep(frame_time)
 
 class SnakeBot(ABC):
     @abstractmethod
@@ -234,21 +234,21 @@ class WallSnakeBot(SnakeBot):
 
         return np.argmin(wall_dists)
 
-def play_game(game: SnakeGame, bot: SnakeBot, visualize_mode: str) -> None:
+def play_game(game: SnakeGame, bot: SnakeBot, frame_time: Optional[int]) -> None:
     game.reset()
 
     terminated = False
 
     while not terminated:
-        game.visualize(visualize_mode, terminated)
+        game.visualize(frame_time, terminated)
 
         action = bot.select_action(game)
         terminated, _ = game.step(action)
 
-    game.visualize(visualize_mode, terminated)
+    game.visualize(frame_time, terminated)
 
 if __name__ == "__main__":
     game = SnakeGame(10, 10)
-    bot = GreedySnakeBot()
+    bot = RandomSnakeBot()
     
-    play_game(game, bot, visualize_mode="text")
+    play_game(game, bot, frame_time=0.02)
