@@ -5,12 +5,12 @@ import copy
 import random
 import time
 import colorsys
-import math
 
 class SnakeGame:
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int = 5, height: int = 5, obs_trail_depth: int = 10) -> None:
         self.width: int = width
         self.height: int = height
+        self.obs_trail_depth: int = obs_trail_depth
         self.num_actions: int = 4
 
         self.reset()
@@ -30,6 +30,9 @@ class SnakeGame:
         self.apple_r: int = apple_int_pos // self.width
         self.apple_c: int = apple_int_pos % self.width
 
+    def is_square_valid(self, r: int, c: int) -> bool:
+        return r >= 0 and r < self.height and c >= 0 and c < self.width
+
     # Returns terminated, ate_apple
     def step(self, action: int) -> Tuple[bool, bool]:
         self.num_steps += 1
@@ -45,7 +48,7 @@ class SnakeGame:
         else:
             raise Exception(f"Invalid action {action}")
         
-        if self.snake_r < 0 or self.snake_r >= self.height or self.snake_c < 0 or self.snake_c >= self.width:
+        if not self.is_square_valid(self.snake_r, self.snake_c):
             return True, False
         
         if self.board[self.snake_r, self.snake_c] > 0:
@@ -70,6 +73,37 @@ class SnakeGame:
         self.board[self.snake_r, self.snake_c] = self.score
 
         return False, ate_apple
+    
+    def observe(self) -> np.ndarray:
+        obs = np.zeros(((self.height + self.width) * 2 + self.obs_trail_depth * 2))
+
+        obs[self.snake_r] = 1
+        obs[self.height + self.snake_c] = 1
+        obs[self.height + self.width + self.apple_c] = 1
+        obs[self.height * 2 + self.width + self.apple_r] = 1
+
+        head_apple_obs_size = (self.height + self.width) * 2
+        cur_r, cur_c = self.snake_r, self.snake_c
+
+        for i in range(min(self.obs_trail_depth, self.score - 1)):
+            found_path = False
+
+            for (shift_r, shift_c) in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
+                next_r, next_c = cur_r + shift_r, cur_c + shift_c
+
+                if self.is_square_valid(next_r, next_c) and self.board[next_r][next_c]:
+                    found_path = True
+
+                    obs[head_apple_obs_size + i * 2] = shift_r
+                    obs[head_apple_obs_size + i * 2 + 1] = shift_c
+
+                    cur_r, cur_c = next_r, next_c
+                    break
+
+            if not found_path:
+                raise Exception("Failed to follow path when generating observation vector")
+            
+        return obs
     
     def visualize(self, visualize_mode: str, terminated: bool) -> None:
         if visualize_mode == "text":
