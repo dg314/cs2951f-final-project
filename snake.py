@@ -26,6 +26,7 @@ class SnakeGame:
         self.board: np.ndarray = np.zeros((self.height, self.width))
         self.score: int = 1
         self.num_steps: int = 0
+        self.actions: list[int] = []
 
         snake_int_pos, apple_int_pos = np.random.choice(np.arange(0, self.width * self.height), size=2, replace=False)
 
@@ -43,6 +44,7 @@ class SnakeGame:
     # Returns terminated, ate_apple
     def step(self, action: int) -> Tuple[bool, bool]:
         self.num_steps += 1
+        self.actions.push(action)
 
         shift_r, shift_c = ACTION_SHIFTS[action]
 
@@ -75,7 +77,7 @@ class SnakeGame:
 
         return False, ate_apple
     
-    # Compresses game state to binary vector observation
+    # Compresses game state and action to binary vector observation
     def observe(self) -> np.ndarray:
         obs = np.zeros(((self.height + self.width) * 2 + self.obs_trail_depth * 4))
 
@@ -90,7 +92,9 @@ class SnakeGame:
         for i in range(min(self.obs_trail_depth, self.score - 1)):
             found_path = False
 
-            for a, (shift_r, shift_c) in enumerate(ACTION_SHIFTS):
+            for action in self.actions[-1:(-1 - self.obs_trail_depth):-1]:
+                shift_r, shift_c = ACTION_SHIFTS[action]
+
                 next_r, next_c = cur_r + shift_r, cur_c + shift_c
 
                 if self.is_square_valid(next_r, next_c) and self.board[next_r][next_c]:
