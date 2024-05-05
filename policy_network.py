@@ -11,11 +11,10 @@ class PolicyNetwork(nn.Module):
         self.linear2: nn.Linear = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        out = self.linear1(x)
-        out = self.linear2(out)
-        out = torch.softmax(out, dim=-1)
+        x = torch.relu(self.linear1(x))
+        x = torch.softmax(self.linear2(x), dim=-1)
 
-        return out
+        return x
     
 def train_policy_network(network: PolicyNetwork, observations: np.ndarray, actions: np.ndarray, learning_rate: int = 0.001, epochs: int = 10, batch_size: int = 32) -> None:
     loss_fn = nn.CrossEntropyLoss()
