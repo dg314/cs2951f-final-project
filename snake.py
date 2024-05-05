@@ -5,6 +5,7 @@ import copy
 import random
 import time
 import colorsys
+from policy_network import PolicyNetwork, policy_network_to_action
 
 ACTION_SHIFTS = [
     (-1, 0),
@@ -44,7 +45,7 @@ class SnakeGame:
     # Returns terminated, ate_apple
     def step(self, action: int) -> Tuple[bool, bool]:
         self.num_steps += 1
-        self.actions.push(action)
+        self.actions.append(action)
 
         shift_r, shift_c = ACTION_SHIFTS[action]
 
@@ -87,28 +88,15 @@ class SnakeGame:
         obs[self.height * 2 + self.width + self.apple_r] = 1
 
         head_apple_obs_size = (self.height + self.width) * 2
-        cur_r, cur_c = self.snake_r, self.snake_c
 
-        for i in range(min(self.obs_trail_depth, self.score - 1)):
-            found_path = False
-
-            for action in self.actions[-1:(-1 - self.obs_trail_depth):-1]:
-                shift_r, shift_c = ACTION_SHIFTS[action]
-
-                next_r, next_c = cur_r + shift_r, cur_c + shift_c
-
-                if self.is_square_valid(next_r, next_c) and self.board[next_r][next_c]:
-                    found_path = True
-
-                    obs[head_apple_obs_size + i * 4 + a] = 1
-
-                    cur_r, cur_c = next_r, next_c
-                    break
-
-            if not found_path:
-                raise Exception("Failed to follow path when generating observation vector")
+        for index, action in enumerate(self.actions[-1:(-1 - self.obs_trail_depth):-1]):
+            obs[head_apple_obs_size + index * 4 + action] = 1
             
         return obs
+    
+    @property
+    def observation_size(self) -> int:
+        return (self.height + self.width) * 2 + self.obs_trail_depth * 4
     
     def visualize(self, frame_time: Optional[int], terminated: bool) -> None:
         if terminated:
@@ -163,22 +151,22 @@ class SnakeGame:
             if not terminated:
                 time.sleep(frame_time)
 
-class SnakeBot(ABC):
+class SnakeAgent(ABC):
     @abstractmethod
     def __init__(self) -> None:
         pass
 
     @abstractmethod
-    def select_action(self, game: SnakeGame) -> int:
+    def policy(self, game: SnakeGame) -> int:
         pass
 
 # Chooses action uniformly randomly among all actions that do not instantly terminate the game.
 # (Chooses action 0 if all actions terminate the game)
-class RandomSnakeBot(SnakeBot):
+class RandomSnakeAgent(SnakeAgent):
     def __init__(self) -> None:
         pass
 
-    def select_action(self, game: SnakeGame) -> int:
+    def policy(self, game: SnakeGame) -> int:
         safe_actions = []
 
         for action in range(game.num_actions):
@@ -196,11 +184,11 @@ class RandomSnakeBot(SnakeBot):
     
 # Chooses action that moves closest to apple among all actions that do not instantly terminate the game.
 # (Chooses action 0 if all actions terminate the game)
-class GreedySnakeBot(SnakeBot):
+class GreedySnakeAgent(SnakeAgent):
     def __init__(self) -> None:
         pass
 
-    def select_action(self, game: SnakeGame) -> int:
+    def policy(self, game: SnakeGame) -> int:
         best_action = None
         closest_apple_dist = float("inf")
 
@@ -224,11 +212,11 @@ class GreedySnakeBot(SnakeBot):
         return 0
     
 # Chooses action to hit wall as fast as possible.
-class WallSnakeBot(SnakeBot):
+class WallSnakeAgent(SnakeAgent):
     def __init__(self) -> None:
         pass
 
-    def select_action(self, game: SnakeGame) -> int:
+    def policy(self, game: SnakeGame) -> int:
         wall_dists = np.array([
             game.snake_r + 1,
             game.width - game.snake_c,
@@ -237,22 +225,60 @@ class WallSnakeBot(SnakeBot):
         ])
 
         return np.argmin(wall_dists)
+    
+# Selects action according to output of policy network
+class ParameterizedSnakeAgent(SnakeAgent):
+    def __init__(self, policy_network: PolicyNetwork) -> None:
+        self.policy_network = policy_network
 
-def play_game(game: SnakeGame, bot: SnakeBot, frame_time: Optional[int]) -> None:
+    def policy(self, game: SnakeGame) -> int:
+        obs = game.observe()
+
+        return policy_network_to_action(self.policy_network, obs)
+
+def play_game(game: SnakeGame, agent: SnakeAgent, rollout_depth: int, frame_time: Optional[int]) -> None:
     game.reset()
 
-    terminated = False
-
-    while not terminated:
+    for _ in range(rollout_depth):
         game.visualize(frame_time, terminated)
 
-        action = bot.select_action(game)
+        action = agent.policy(game)
         terminated, _ = game.step(action)
+
+        if terminated:
+            break
 
     game.visualize(frame_time, terminated)
 
+def compare_agents(game: SnakeGame, expert_agent: SnakeAgent, param_agent: ParameterizedSnakeAgent, follow_expert_prob: float, num_rollouts: int, rollout_depth: int) -> None:
+    num_steps = 0
+    num_matched_steps = 0
+
+    for _ in range(num_rollouts):
+        game.reset()
+
+        for _ in range(rollout_depth):
+            param_agent_action = param_agent.policy(game)
+            expert_agent_action = expert_agent.policy(game)
+
+            if param_agent_action == expert_agent_action:
+                num_matched_steps += 1
+
+            action = expert_agent_action if random.random() < follow_expert_prob else param_agent_action
+
+            terminated, _ = game.step(action)
+
+            num_steps += 1
+
+            if terminated:
+                break
+
+    accuracy = num_matched_steps / num_steps
+
+    print(f"Param agent matched expert agent with accuracy {accuracy:.2f} ({num_matched_steps}/{num_steps})")
+
 if __name__ == "__main__":
     game = SnakeGame(10, 10)
-    bot = RandomSnakeBot()
+    agent = RandomSnakeAgent()
     
-    play_game(game, bot, frame_time=0.02)
+    play_game(game, agent, rollout_depth=1000, frame_time=0.02)
