@@ -5,7 +5,7 @@ import copy
 import random
 import time
 import colorsys
-from policy_network import PolicyNetwork, policy_network_to_action
+from models import PolicyNetwork, policy_network_to_action, policy_networks_to_action
 
 ACTION_SHIFTS = [
     (-1, 0),
@@ -15,7 +15,7 @@ ACTION_SHIFTS = [
 ]
 
 class SnakeGame:
-    def __init__(self, width: int = 5, height: int = 5, obs_trail_depth: int = 10) -> None:
+    def __init__(self, width: int = 4, height: int = 4, obs_trail_depth: int = 4) -> None:
         self.width: int = width
         self.height: int = height
         self.obs_trail_depth: int = obs_trail_depth
@@ -129,12 +129,8 @@ class SnakeGame:
 
                         if val == board_max:
                             line += "█"
-                        elif val >= board_max * 2 / 3:
-                            line += "▓"
-                        elif val >= board_max / 3:
-                            line += "▒"
                         else:
-                            line += "░"
+                            line += "▒"
 
                         line += "\033[0m"
                     elif r == self.apple_r and c == self.apple_c:
@@ -211,6 +207,21 @@ class GreedySnakeAgent(SnakeAgent):
         
         return 0
     
+# Chooses action that moves furthest from apple
+class AllergicSnakeAgent(SnakeAgent):
+    def __init__(self) -> None:
+        pass
+
+    def policy(self, game: SnakeGame) -> int:
+        apple_dists = np.array([
+            game.apple_r - game.snake_r,
+            game.snake_c - game.apple_c,
+            game.snake_r - game.apple_r,
+            game.apple_c - game.snake_c
+        ])
+
+        return np.argmax(apple_dists)
+    
 # Chooses action to hit wall as fast as possible.
 class WallSnakeAgent(SnakeAgent):
     def __init__(self) -> None:
@@ -226,6 +237,38 @@ class WallSnakeAgent(SnakeAgent):
 
         return np.argmin(wall_dists)
     
+# Zig-zags in cycle that covers all squares (only works on even sized games)
+class ZigZagSnakeAgent(SnakeAgent):
+    def __init__(self) -> None:
+        pass
+
+    def policy(self, game: SnakeGame) -> int:
+        if game.snake_c == 0:
+            if game.snake_r == 0:
+                return 1
+            else:
+                return 0
+        elif game.snake_c == 1:
+            if game.snake_r == 0:
+                return 1
+            elif game.snake_r < game.height - 1:
+                if game.snake_r % 2 == 0:
+                    return 1
+                else:
+                    return 2
+            else:
+                return 3
+        elif game.snake_c < game.width - 1:
+            if game.snake_r % 2 == 0:
+                return 1
+            else:
+                return 3
+        else:
+            if game.snake_r % 2 == 0:
+                return 2
+            else:
+                return 3
+
 # Selects action according to output of policy network
 class ParameterizedSnakeAgent(SnakeAgent):
     def __init__(self, policy_network: PolicyNetwork) -> None:
@@ -235,9 +278,22 @@ class ParameterizedSnakeAgent(SnakeAgent):
         obs = game.observe()
 
         return policy_network_to_action(self.policy_network, obs)
+    
+# Selects action according to outputs of multiple rated policy networks
+class RatedParameterizedSnakeAgent(SnakeAgent):
+    def __init__(self, policy_networks: list[PolicyNetwork], ratings: list[float]) -> None:
+        self.policy_networks = policy_networks
+        self.ratings = ratings
+
+    def policy(self, game: SnakeGame) -> int:
+        obs = game.observe()
+
+        return policy_networks_to_action(self.policy_networks, self.ratings, obs)
 
 def play_game(game: SnakeGame, agent: SnakeAgent, rollout_depth: int, frame_time: Optional[int]) -> None:
     game.reset()
+
+    terminated = False
 
     for _ in range(rollout_depth):
         game.visualize(frame_time, terminated)
@@ -250,7 +306,7 @@ def play_game(game: SnakeGame, agent: SnakeAgent, rollout_depth: int, frame_time
 
     game.visualize(frame_time, terminated)
 
-def compare_agents(game: SnakeGame, expert_agent: SnakeAgent, param_agent: ParameterizedSnakeAgent, follow_expert_prob: float, num_rollouts: int, rollout_depth: int) -> None:
+def compare_agents(game: SnakeGame, demo_agent: SnakeAgent, learned_agent: SnakeAgent, follow_demo_prob: float, num_rollouts: int, rollout_depth: int) -> None:
     num_steps = 0
     num_matched_steps = 0
 
@@ -258,13 +314,13 @@ def compare_agents(game: SnakeGame, expert_agent: SnakeAgent, param_agent: Param
         game.reset()
 
         for _ in range(rollout_depth):
-            param_agent_action = param_agent.policy(game)
-            expert_agent_action = expert_agent.policy(game)
+            param_agent_action = learned_agent.policy(game)
+            demo_agent_action = demo_agent.policy(game)
 
-            if param_agent_action == expert_agent_action:
+            if param_agent_action == demo_agent_action:
                 num_matched_steps += 1
 
-            action = expert_agent_action if random.random() < follow_expert_prob else param_agent_action
+            action = demo_agent_action if random.random() < follow_demo_prob else param_agent_action
 
             terminated, _ = game.step(action)
 
@@ -275,10 +331,33 @@ def compare_agents(game: SnakeGame, expert_agent: SnakeAgent, param_agent: Param
 
     accuracy = num_matched_steps / num_steps
 
-    print(f"Param agent matched expert agent with accuracy {accuracy:.2f} ({num_matched_steps}/{num_steps})")
+    print(f"Param agent matched {demo_agent.__class__.__name__} agent with accuracy {accuracy * 100:.2f}% ({num_matched_steps}/{num_steps})")
+
+def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout_depth: int) -> None:
+    num_steps = 0
+    total_score = 0
+
+    for _ in range(num_rollouts):
+        game.reset()
+
+        for _ in range(rollout_depth):
+            action = agent.policy(game)
+
+            terminated, _ = game.step(action)
+
+            num_steps += 1
+
+            if terminated:
+                total_score += game.score
+                break
+
+    average_score = total_score / num_rollouts
+    average_rollout_steps = num_steps / num_rollouts
+
+    print(f"{agent.__class__.__name__} acheived average score {average_score:.2f} and average rollout steps {average_rollout_steps:.2f}")
 
 if __name__ == "__main__":
-    game = SnakeGame(10, 10)
-    agent = RandomSnakeAgent()
+    game = SnakeGame(20, 10)
+    agent = ZigZagSnakeAgent()
     
     play_game(game, agent, rollout_depth=1000, frame_time=0.02)
