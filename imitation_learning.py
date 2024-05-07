@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from snake import SnakeGame, SnakeAgent, AllergicSnakeAgent, RandomSnakeAgent, ZigZagSnakeAgent, ParameterizedSnakeAgent, RatedParameterizedSnakeAgent, GreedySnakeAgent, compare_agents, analyze_agent
+from snake import SnakeGame, SnakeAgent, AllergicSnakeAgent, RandomSnakeAgent, ZigZagSnakeAgent, ParameterizedSnakeAgent, RatedParameterizedSnakeAgent, GreedySnakeAgent, LeftGreedySnakeAgent, RightGreedySnakeAgent, compare_agents, analyze_agent
 from models import PolicyNetwork, train_policy_network, Discriminator, train_gan
 import copy
 import random
@@ -122,8 +122,8 @@ def run_olympic_judges_experiment(game: SnakeGame, demo_agents: list[SnakeAgent]
         param_agents.append(param_agent)
     
         print(f"\n{demo_agent.__class__.__name__} individual trial:")
-        compare_agents(game, demo_agent, learned_agent=param_agent, follow_demo_prob=0.5, num_rollouts=1000, rollout_depth=1000)
-        analyze_agent(game, agent=demo_agent, num_rollouts=1000, rollout_depth=1000)
+        compare_agents(game, demo_agent, learned_agent=param_agent, follow_demo_prob=0.5, num_rollouts=100, rollout_depth=100)
+        analyze_agent(game, agent=demo_agent, num_rollouts=100, rollout_depth=100)
 
     policy_networks = [param_agent.policy_network for param_agent in param_agents]
 
@@ -132,17 +132,15 @@ def run_olympic_judges_experiment(game: SnakeGame, demo_agents: list[SnakeAgent]
         rated_param_agent = RatedParameterizedSnakeAgent(policy_networks, ratings)
 
         print(f"\nCombined trial with ratings {ratings}")
-        analyze_agent(game, agent=rated_param_agent, num_rollouts=1000, rollout_depth=1000)
+        analyze_agent(game, agent=rated_param_agent, num_rollouts=100, rollout_depth=100)
 
 if __name__ == "__main__":
     game = SnakeGame()
     demo_agents = [
-        GreedySnakeAgent(),
-        ZigZagSnakeAgent(),
-        RandomSnakeAgent(),
-        AllergicSnakeAgent(),
+        LeftGreedySnakeAgent(),
+        RightGreedySnakeAgent()
     ]
 
-    gail = GAIL(game, max_iters=50, rollouts_per_iter=1000, rollout_depth=1000)
+    smile = SMILe(game, max_iters=10, rollouts_per_iter=100, rollout_depth=100)
 
-    run_olympic_judges_experiment(game, demo_agents, imitation_learner=gail)
+    run_olympic_judges_experiment(game, demo_agents, imitation_learner=smile)

@@ -206,7 +206,73 @@ class GreedySnakeAgent(SnakeAgent):
             return best_action
         
         return 0
+
+# Moves left if on right quarter of the board.
+# Otherwise, chooses action that moves closest to apple among all actions that do not instantly terminate the game or move to the right quarter of the board.
+# (Chooses left if all actions terminate the game)
+class LeftGreedySnakeAgent(SnakeAgent):
+    def __init__(self) -> None:
+        pass
+
+    def policy(self, game: SnakeGame) -> int:
+        if game.snake_c >= game.width * 3 / 4:
+            return 3
+
+        best_action = None
+        closest_apple_dist = float("inf")
+
+        for action in range(game.num_actions):
+            game_copy = copy.deepcopy(game)
+
+            terminated, _ = game_copy.step(action)
+
+            if not terminated and game_copy.snake_c < game.width * 3 / 4:
+                # Measure distance to apple in original game
+                # (account for case that apple was eaten and regenerated in step)
+                apple_dist = abs(game_copy.snake_r - game.apple_r) + abs(game_copy.snake_c - game.apple_c)
+
+                if apple_dist < closest_apple_dist:
+                    best_action = action
+                    closest_apple_dist = apple_dist
+
+        if best_action is not None:
+            return best_action
+        
+        return 3
     
+# Moves right if on left quarter of the board.
+# Otherwise, chooses action that moves closest to apple among all actions that do not instantly terminate the game or move to the left quarter of the board.
+# (Chooses right if all actions terminate the game)
+class RightGreedySnakeAgent(SnakeAgent):
+    def __init__(self) -> None:
+        pass
+
+    def policy(self, game: SnakeGame) -> int:
+        if game.snake_c < game.width / 4:
+            return 1
+
+        best_action = None
+        closest_apple_dist = float("inf")
+
+        for action in range(game.num_actions):
+            game_copy = copy.deepcopy(game)
+
+            terminated, _ = game_copy.step(action)
+
+            if not terminated and game_copy.snake_c >= game.width / 4:
+                # Measure distance to apple in original game
+                # (account for case that apple was eaten and regenerated in step)
+                apple_dist = abs(game_copy.snake_r - game.apple_r) + abs(game_copy.snake_c - game.apple_c)
+
+                if apple_dist < closest_apple_dist:
+                    best_action = action
+                    closest_apple_dist = apple_dist
+
+        if best_action is not None:
+            return best_action
+        
+        return 1
+
 # Chooses action that moves furthest from apple
 class AllergicSnakeAgent(SnakeAgent):
     def __init__(self) -> None:
@@ -348,8 +414,9 @@ def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout
             num_steps += 1
 
             if terminated:
-                total_score += game.score
                 break
+
+        total_score += game.score
 
     average_score = total_score / num_rollouts
     average_rollout_steps = num_steps / num_rollouts
@@ -358,6 +425,6 @@ def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout
 
 if __name__ == "__main__":
     game = SnakeGame(8, 8)
-    agent = GreedySnakeAgent()
+    agent = LeftGreedySnakeAgent()
     
     visualize_game(game, agent, rollout_depth=1000, frame_time=0.02)
