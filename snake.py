@@ -290,7 +290,7 @@ class RatedParameterizedSnakeAgent(SnakeAgent):
 
         return policy_networks_to_action(self.policy_networks, self.ratings, obs)
 
-def play_game(game: SnakeGame, agent: SnakeAgent, rollout_depth: int, frame_time: Optional[int]) -> None:
+def visualize_game(game: SnakeGame, agent: SnakeAgent, rollout_depth: int, frame_time: Optional[int]) -> None:
     game.reset()
 
     terminated = False
@@ -357,7 +357,7 @@ def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout
     print(f"{agent.__class__.__name__} acheived average score {average_score:.2f} and average rollout steps {average_rollout_steps:.2f}")
 
 if __name__ == "__main__":
-    game = SnakeGame(20, 10)
-    agent = ZigZagSnakeAgent()
+    game = SnakeGame(8, 8)
+    agent = GreedySnakeAgent()
     
-    play_game(game, agent, rollout_depth=1000, frame_time=0.02)
+    visualize_game(game, agent, rollout_depth=1000, frame_time=0.02)

@@ -40,9 +40,9 @@ def sample_trajectory(game: SnakeGame, policy: Callable[[SnakeGame], int], rollo
 
     return observations, actions
 
-# Maximum Margin Inverse Reinforcement Learning
-# (Algorithms for Decision Making 18.4)
-class MaximumMarginIRL(ImitationLearner):
+# Stochastic Mixing Iterative Learning
+# (Algorithms for Decision Making 18.3)
+class SMILe(ImitationLearner):
     def __init__(self, game: SnakeGame, max_iters: int, rollouts_per_iter: int, rollout_depth: int) -> None:
         self.game = game
         self.max_iters = max_iters
