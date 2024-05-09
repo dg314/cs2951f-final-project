@@ -402,6 +402,8 @@ def compare_agents(game: SnakeGame, demo_agent: SnakeAgent, learned_agent: Snake
 def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout_depth: int) -> None:
     num_steps = 0
     total_score = 0
+    num_left_quarter_steps = 0
+    num_right_quarter_steps = 0
 
     for _ in range(num_rollouts):
         game.reset()
@@ -413,6 +415,11 @@ def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout
 
             num_steps += 1
 
+            if game.snake_c < game.width / 4:
+                num_left_quarter_steps += 1
+            elif game.snake_c >= game.width * 3 / 4:
+                num_right_quarter_steps += 1
+
             if terminated:
                 break
 
@@ -420,11 +427,15 @@ def analyze_agent(game: SnakeGame, agent: SnakeAgent, num_rollouts: int, rollout
 
     average_score = total_score / num_rollouts
     average_rollout_steps = num_steps / num_rollouts
+    proportion_left_quarter_steps = num_left_quarter_steps / num_steps
+    proportion_right_quarter_steps = num_right_quarter_steps / num_steps
 
     print(f"{agent.__class__.__name__} acheived average score {average_score:.2f} and average rollout steps {average_rollout_steps:.2f}")
+    print(f"{proportion_left_quarter_steps * 100:.2f}% of steps were on the left quarter of the board.")
+    print(f"{proportion_right_quarter_steps * 100:.2f}% of steps were on the right quarter of the board.")
 
 if __name__ == "__main__":
-    game = SnakeGame(8, 8)
-    agent = LeftGreedySnakeAgent()
+    game = SnakeGame(10, 10)
+    agent = AllergicSnakeAgent()
     
-    visualize_game(game, agent, rollout_depth=1000, frame_time=0.02)
+    visualize_game(game, agent, rollout_depth=1000, frame_time=1)

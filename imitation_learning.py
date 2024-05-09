@@ -63,7 +63,7 @@ class SMILe(ImitationLearner):
 
             train_policy_network(param_agent.policy_network, observations, actions)
 
-            param_agents.append(copy.deepcopy(param_agent.policy_network))
+            param_agents.append(copy.deepcopy(param_agent))
 
             mixture_dist = np.array([(1 - self.mixing_scalar) ** i for i in range(iter + 1)])
             mixture_dist /= np.sum(mixture_dist)
@@ -128,7 +128,7 @@ def run_olympic_judges_experiment(game: SnakeGame, demo_agents: list[SnakeAgent]
     policy_networks = [param_agent.policy_network for param_agent in param_agents]
 
     for i in range(2 ** len(demo_agents)):
-        ratings = [1 if (i >> n) & 1 == 1 else -1 for n in range(len(demo_agents))]
+        ratings = [1 if (i >> n) & 1 == 1 else 0.5 for n in range(len(demo_agents))]
         rated_param_agent = RatedParameterizedSnakeAgent(policy_networks, ratings)
 
         print(f"\nCombined trial with ratings {ratings}")
@@ -141,6 +141,6 @@ if __name__ == "__main__":
         RightGreedySnakeAgent()
     ]
 
-    smile = SMILe(game, max_iters=10, rollouts_per_iter=100, rollout_depth=100)
+    imitation_learner = SMILe(game, max_iters=10, rollouts_per_iter=100, rollout_depth=100)
 
-    run_olympic_judges_experiment(game, demo_agents, imitation_learner=smile)
+    run_olympic_judges_experiment(game, demo_agents, imitation_learner=imitation_learner)
